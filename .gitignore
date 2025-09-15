@@ -17,3 +17,39 @@ emulator/dist/
 
 emsdk/
 
+# Ignore build artifacts
+/build/
+/dist/
+/emsdk/
+*.o
+*.obj
+*.wasm
+*.so
+*.dll
+*.dylib
+*.exe
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE files
+.vscode/
+.idea/
+
+# Node modules (server-side deps)
+node_modules/
+
+# Cache
+.cache/
+.tmp/
+
+# Ignore everything in server EXCEPT server.js
+/server/*
+!/server/server.js
