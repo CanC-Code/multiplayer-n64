@@ -1,4 +1,5 @@
 run = "npm start --prefix server"
 
-[env]
-PORT = "3000"
+[interpreter]
+  language = "nodejs"
+  version = "18"
