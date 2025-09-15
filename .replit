@@ -1,7 +1,4 @@
-run = "npm install --prefix server && node server/server.js"
+run = "npm start --prefix server"
 
 [env]
-NODE_ENV = "production"
-
-[interpreter]
-command = ["node"]
+PORT = "3000"
