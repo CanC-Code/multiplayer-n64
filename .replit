@@ -1,5 +1,4 @@
 run = "cd server && npm install && node server.js"
-
 [interpreter]
   language = "nodejs"
   version = "18"
