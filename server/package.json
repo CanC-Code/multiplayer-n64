@@ -1,13 +1,13 @@
 {
   "name": "multiplayer-n64-server",
   "version": "1.0.0",
-  "description": "WebSocket signaling server for Multiplayer N64 emulator",
+  "description": "WebSocket relay for Multiplayer N64 emulator",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
   },
   "dependencies": {
-    "express": "^4.18.2",
-    "ws": "^8.13.0"
+    "ws": "^8.18.0",
+    "uuid": "^9.0.1"
   }
 }
