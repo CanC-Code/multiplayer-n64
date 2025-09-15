@@ -1,4 +1,4 @@
-run = "npm start --prefix server"
+run = "cd server && npm install && node server.js"
 
 [interpreter]
   language = "nodejs"
