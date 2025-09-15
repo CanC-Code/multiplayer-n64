@@ -1,0 +1,17 @@
+--- a/mupen64plus-next/mupen64plus-core/src/main/util.c
++++ b/mupen64plus-next/mupen64plus-core/src/main/util.c
+@@
+-#include "md5.h"
++/* Use libretro-common MD5 instead of legacy */
++#include <utils/md5.h>
+@@
+-    md5_state_t state;
+-    md5_init(&state);
+-    md5_append(&state, data, (int) length);
+-    md5_finish(&state, digest);
++    MD5_CTX ctx;
++    MD5_Init(&ctx);
++    MD5_Update(&ctx, data, length);
++    MD5_Final(digest, &ctx);
+
+

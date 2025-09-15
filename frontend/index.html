@@ -1,11 +1,73 @@
-<!DOCTYPE html><html lang="en">
+<!DOCTYPE html>
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
   <title>Multiplayer N64 Emulator</title>
+  <style>
+    body {
+      background: #111;
+      color: #eee;
+      font-family: sans-serif;
+      text-align: center;
+    }
+    #canvas {
+      border: 2px solid #555;
+      margin-top: 10px;
+    }
+    #controls {
+      margin-top: 20px;
+    }
+  </style>
 </head>
 <body>
-  <h1>Multiplayer N64 Emulator</h1>
-  <p>Frontend will load here. (GitHub Pages test)</p>
+  <h1>Multiplayer N64 Emulator (WASM)</h1>
+  <canvas id="canvas" width="640" height="480"></canvas>
+
+  <div id="controls">
+    <input type="file" id="romInput" accept=".z64,.n64,.v64" />
+    <button id="startBtn">Start Game</button>
+  </div>
+
+  <script type="text/javascript">
+    let N64Module;
+
+    // Load WASM core
+    N64Wasm().then((Module) => {
+      N64Module = Module;
+      console.log("[+] N64 WASM core loaded");
+
+      // Attach SDL canvas
+      Module.canvas = document.getElementById("canvas");
+    });
+
+    // Handle ROM loading
+    document.getElementById("startBtn").addEventListener("click", async () => {
+      const fileInput = document.getElementById("romInput");
+      if (!fileInput.files.length) {
+        alert("Please select a ROM file first!");
+        return;
+      }
+
+      const romFile = fileInput.files[0];
+      const romData = new Uint8Array(await romFile.arrayBuffer());
+
+      // Put ROM into Emscripten FS
+      N64Module.FS_createDataFile("/", "game.z64", romData, true, true);
+
+      console.log("[+] ROM loaded into FS: game.z64");
+
+      // Call emulator entrypoint (example, adjust if different)
+      if (N64Module.cwrap) {
+        const startEmu = N64Module.cwrap("retro_main", "number", ["number","number"]);
+        startEmu(0, 0);
+      } else {
+        console.error("retro_main not exported yet!");
+      }
+    });
+  </script>
+
+  <!-- Load compiled core -->
+  <script src="../emulator/n64wasm.js"></script>
 </body>
 </html>
 

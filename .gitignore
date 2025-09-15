@@ -15,3 +15,5 @@ emulator/dist/
 # Environment
 .env
 
+emsdk/
+
