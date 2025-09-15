@@ -50,6 +50,7 @@ node_modules/
 .cache/
 .tmp/
 
-# Ignore everything in server EXCEPT server.js
+# Ignore everything in server EXCEPT server.js and package.json
 /server/*
 !/server/server.js
+!/server/package.json
