@@ -1,0 +1,9 @@
+run: "npm start --prefix server"
+language: nodejs
+
+env:
+  NODE_ENV: development
+
+# Optional: install step
+install:
+  - "npm install --prefix server"
