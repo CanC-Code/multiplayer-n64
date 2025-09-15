@@ -1,0 +1,7 @@
+run = "npm install --prefix server && node server/server.js"
+
+[env]
+NODE_ENV = "production"
+
+[interpreter]
+command = ["node"]
