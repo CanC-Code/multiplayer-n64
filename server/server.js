@@ -1,157 +1,94 @@
-// server/server.js
-// MultiplayerN64 Node.js WebSocket server
-// Runs with: `node server/server.js`
-
-const express = require("express");
-const http = require("http");
 const WebSocket = require("ws");
 const { v4: uuidv4 } = require("uuid");
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 8080;
+const wss = new WebSocket.Server({ port: PORT });
 
-// Express app (serves as a health check endpoint, not the emulator)
-const app = express();
-app.get("/", (req, res) => res.send("MultiplayerN64 WebSocket Server is running"));
+let rooms = {}; // roomCode -> { host: client, players: [], spectators: [] }
 
-// HTTP + WebSocket server
-const server = http.createServer(app);
-const wss = new WebSocket.Server({ server });
-
-// In-memory room store
-// Structure: { roomId: { host: playerId, players: Map<playerId, ws>, spectators: Set<ws> } }
-const rooms = {};
-
-function createRoom(ws) {
-  const roomId = Math.random().toString(36).substring(2, 8); // 6-char code
-  const playerId = uuidv4();
-
-  rooms[roomId] = {
-    host: playerId,
-    players: new Map([[playerId, ws]]),
-    spectators: new Set()
-  };
-
-  ws.roomId = roomId;
-  ws.playerId = playerId;
-
-  ws.send(JSON.stringify({ type: "room-created", roomId, playerId }));
-  console.log(`Room ${roomId} created by host ${playerId}`);
-}
-
-function joinRoom(ws, roomId, spectator = false) {
-  if (!rooms[roomId]) {
-    ws.send(JSON.stringify({ type: "error", message: "Room not found" }));
-    return;
-  }
-
-  const playerId = uuidv4();
-  ws.roomId = roomId;
-
-  if (spectator) {
-    rooms[roomId].spectators.add(ws);
-    ws.playerId = "spectator:" + playerId;
-    ws.send(JSON.stringify({ type: "joined-spectator", roomId }));
-    console.log(`Spectator joined room ${roomId}`);
-  } else {
-    rooms[roomId].players.set(playerId, ws);
-    ws.playerId = playerId;
-    ws.send(JSON.stringify({ type: "joined", roomId, playerId }));
-    console.log(`Player ${playerId} joined room ${roomId}`);
-  }
-}
-
-function broadcast(roomId, data, excludeId = null) {
-  const room = rooms[roomId];
-  if (!room) return;
-
-  const message = JSON.stringify(data);
-
-  // Send to all players
-  for (const [id, client] of room.players.entries()) {
-    if (id !== excludeId && client.readyState === WebSocket.OPEN) {
-      client.send(message);
-    }
-  }
-
-  // Send to spectators
-  for (const client of room.spectators) {
-    if (client.readyState === WebSocket.OPEN) {
-      client.send(message);
-    }
-  }
+function generateRoomCode() {
+  return Math.random().toString(36).substring(2, 8).toUpperCase();
 }
 
 wss.on("connection", (ws) => {
-  console.log("New client connected");
+  ws.id = uuidv4();
+  ws.role = null;
+  ws.roomCode = null;
 
-  ws.on("message", (message) => {
+  ws.on("message", (msg) => {
     try {
-      const data = JSON.parse(message);
+      const data = JSON.parse(msg);
 
-      switch (data.type) {
-        case "create-room":
-          createRoom(ws);
-          break;
+      // Host creates a room
+      if (data.type === "host") {
+        const roomCode = generateRoomCode();
+        rooms[roomCode] = { host: ws, players: [], spectators: [] };
+        ws.role = "host";
+        ws.roomCode = roomCode;
+        ws.send(JSON.stringify({ type: "room_created", roomCode }));
+      }
 
-        case "join-room":
-          joinRoom(ws, data.roomId, false);
-          break;
+      // Player joins
+      else if (data.type === "join" && data.roomCode) {
+        const room = rooms[data.roomCode];
+        if (!room) {
+          ws.send(JSON.stringify({ type: "error", message: "Room not found" }));
+          return;
+        }
+        ws.role = "player";
+        ws.roomCode = data.roomCode;
+        room.players.push(ws);
+        room.host.send(JSON.stringify({ type: "player_joined", id: ws.id }));
+        ws.send(JSON.stringify({ type: "joined", roomCode: data.roomCode }));
+      }
 
-        case "spectate-room":
-          joinRoom(ws, data.roomId, true);
-          break;
+      // Spectator joins
+      else if (data.type === "spectate" && data.roomCode) {
+        const room = rooms[data.roomCode];
+        if (!room) {
+          ws.send(JSON.stringify({ type: "error", message: "Room not found" }));
+          return;
+        }
+        ws.role = "spectator";
+        ws.roomCode = data.roomCode;
+        room.spectators.push(ws);
+        ws.send(JSON.stringify({ type: "spectating", roomCode: data.roomCode }));
+      }
 
-        case "input":
-          // Input events from a player
-          if (ws.roomId) {
-            broadcast(ws.roomId, {
-              type: "input",
-              playerId: ws.playerId,
-              input: data.input
-            }, ws.playerId);
+      // Relay game input/state
+      else if (data.type === "input" && ws.roomCode) {
+        const room = rooms[ws.roomCode];
+        if (room) {
+          if (ws.role === "player") {
+            room.host.send(JSON.stringify({ type: "input", id: ws.id, input: data.input }));
+          } else if (ws.role === "host") {
+            [...room.players, ...room.spectators].forEach((client) => {
+              if (client.readyState === WebSocket.OPEN) {
+                client.send(JSON.stringify({ type: "state", state: data.state }));
+              }
+            });
           }
-          break;
-
-        case "state-sync":
-          // Host can broadcast full game state
-          if (ws.roomId && ws.playerId === rooms[ws.roomId].host) {
-            broadcast(ws.roomId, {
-              type: "state-sync",
-              state: data.state
-            }, ws.playerId);
-          }
-          break;
-
-        default:
-          ws.send(JSON.stringify({ type: "error", message: "Unknown message type" }));
+        }
       }
     } catch (err) {
-      console.error("Invalid message:", message, err);
-      ws.send(JSON.stringify({ type: "error", message: "Invalid JSON" }));
+      console.error("Message error:", err);
     }
   });
 
   ws.on("close", () => {
-    console.log("Client disconnected");
-    if (!ws.roomId || !rooms[ws.roomId]) return;
-
-    const room = rooms[ws.roomId];
-    if (room.players.has(ws.playerId)) {
-      room.players.delete(ws.playerId);
-      broadcast(ws.roomId, { type: "player-left", playerId: ws.playerId });
-    } else if (room.spectators.has(ws)) {
-      room.spectators.delete(ws);
-    }
-
-    // Delete room if empty
-    if (room.players.size === 0 && room.spectators.size === 0) {
-      delete rooms[ws.roomId];
-      console.log(`Room ${ws.roomId} deleted`);
+    if (ws.roomCode && rooms[ws.roomCode]) {
+      const room = rooms[ws.roomCode];
+      if (ws.role === "host") {
+        // Close whole room if host disconnects
+        room.players.forEach((p) => p.close());
+        room.spectators.forEach((s) => s.close());
+        delete rooms[ws.roomCode];
+      } else {
+        room.players = room.players.filter((p) => p !== ws);
+        room.spectators = room.spectators.filter((s) => s !== ws);
+      }
     }
   });
 });
 
-// Start server
-server.listen(PORT, () => {
-  console.log(`✅ MultiplayerN64 WebSocket Server running on port ${PORT}`);
-});✅
+console.log(`? WebSocket server running on port ${PORT}`);
