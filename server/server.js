@@ -2,9 +2,10 @@ const WebSocket = require("ws");
 const { v4: uuidv4 } = require("uuid");
 
 const PORT = process.env.PORT || 8080;
-const wss = new WebSocket.Server({ port: PORT });
+const wss = new WebSocket.Server({ port: PORT, host: "0.0.0.0" });
 
-let rooms = {}; // roomCode -> { host: client, players: [], spectators: [] }
+// Room store: roomCode -> { host: client, players: [], spectators: [] }
+let rooms = {};
 
 function generateRoomCode() {
   return Math.random().toString(36).substring(2, 8).toUpperCase();
@@ -28,7 +29,7 @@ wss.on("connection", (ws) => {
         ws.send(JSON.stringify({ type: "room_created", roomCode }));
       }
 
-      // Player joins
+      // Player joins a room
       else if (data.type === "join" && data.roomCode) {
         const room = rooms[data.roomCode];
         if (!room) {
@@ -55,13 +56,17 @@ wss.on("connection", (ws) => {
         ws.send(JSON.stringify({ type: "spectating", roomCode: data.roomCode }));
       }
 
-      // Relay game input/state
+      // Relay input/state
       else if (data.type === "input" && ws.roomCode) {
         const room = rooms[ws.roomCode];
         if (room) {
           if (ws.role === "player") {
-            room.host.send(JSON.stringify({ type: "input", id: ws.id, input: data.input }));
+            // Player input goes to host
+            if (room.host.readyState === WebSocket.OPEN) {
+              room.host.send(JSON.stringify({ type: "input", id: ws.id, input: data.input }));
+            }
           } else if (ws.role === "host") {
+            // Host state goes to players and spectators
             [...room.players, ...room.spectators].forEach((client) => {
               if (client.readyState === WebSocket.OPEN) {
                 client.send(JSON.stringify({ type: "state", state: data.state }));
@@ -79,7 +84,7 @@ wss.on("connection", (ws) => {
     if (ws.roomCode && rooms[ws.roomCode]) {
       const room = rooms[ws.roomCode];
       if (ws.role === "host") {
-        // Close whole room if host disconnects
+        // Host disconnect closes room
         room.players.forEach((p) => p.close());
         room.spectators.forEach((s) => s.close());
         delete rooms[ws.roomCode];
@@ -91,4 +96,4 @@ wss.on("connection", (ws) => {
   });
 });
 
-console.log(`? WebSocket server running on port ${PORT}`);
+console.log(`WebSocket relay running on port ${PORT}`);
